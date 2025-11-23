@@ -13,24 +13,91 @@ std::optional<std::chrono::system_clock::time_point> parseTimestamp(const std::o
     return std::nullopt;
   }
 
-  std::string normalized = *value;
-  std::replace(normalized.begin(), normalized.end(), 'T', ' ');
+  std::string input = *value;
+  std::replace(input.begin(), input.end(), 'T', ' ');
 
-  std::istringstream stream(normalized);
-  std::chrono::sys_time<std::chrono::seconds> result;
-  stream >> std::chrono::parse("%Y-%m-%d %H:%M:%S%z", result);
+  bool hasOffset = false;
+  int offsetMinutes = 0;
 
-  if (stream.fail()) {
-    stream.clear();
-    stream.seekg(0);
-    stream >> std::chrono::parse("%Y-%m-%d %H:%M:%S", result);
+  // Handle trailing 'Z'
+  if (!input.empty() && (input.back() == 'Z' || input.back() == 'z')) {
+    hasOffset = true;
+    input.pop_back();
   }
 
-  if (stream.fail()) {
+  const auto spacePos = input.find(' ');
+  if (spacePos != std::string::npos) {
+    std::size_t offsetPos = std::string::npos;
+    for (std::size_t i = spacePos + 1; i < input.size(); ++i) {
+      if (input[i] == '+' || input[i] == '-') {
+        offsetPos = i;
+        break;
+      }
+    }
+
+    if (offsetPos != std::string::npos) {
+      hasOffset = true;
+      std::string offsetStr = input.substr(offsetPos);
+      input = input.substr(0, offsetPos);
+
+      try {
+        if (offsetStr.size() >= 3) {
+          const int sign = offsetStr[0] == '-' ? -1 : 1;
+          std::string hoursPart;
+          std::string minutesPart = "0";
+
+          auto colonPos = offsetStr.find(':');
+          if (colonPos != std::string::npos) {
+            hoursPart = offsetStr.substr(1, colonPos - 1);
+            minutesPart = offsetStr.substr(colonPos + 1);
+          } else {
+            hoursPart = offsetStr.substr(1, 2);
+            if (offsetStr.size() >= 5) {
+              minutesPart = offsetStr.substr(3, 2);
+            }
+          }
+
+          offsetMinutes = sign * (std::stoi(hoursPart) * 60 + std::stoi(minutesPart));
+        }
+      } catch (const std::exception&) {
+        return std::nullopt;
+      }
+    }
+  }
+
+  std::tm tm = {};
+  std::istringstream stream(input);
+
+  if (!(stream >> std::get_time(&tm, "%Y-%m-%d %H:%M:%S"))) {
+    stream.clear();
+    stream.str(input);
+    if (!(stream >> std::get_time(&tm, "%Y-%m-%d %H:%M"))) {
+      stream.clear();
+      stream.str(input);
+      if (!(stream >> std::get_time(&tm, "%Y-%m-%d"))) {
+        return std::nullopt;
+      }
+    }
+  }
+
+  using namespace std::chrono;
+
+  const auto year = std::chrono::year{tm.tm_year + 1900};
+  const auto month = std::chrono::month{static_cast<unsigned>(tm.tm_mon + 1)};
+  const auto day = std::chrono::day{static_cast<unsigned>(tm.tm_mday)};
+
+  if (!year.ok() || !month.ok() || !day.ok()) {
     return std::nullopt;
   }
 
-  return result;
+  sys_days date{year / month / day};
+  auto timePoint = date + hours{tm.tm_hour} + minutes{tm.tm_min} + seconds{tm.tm_sec};
+
+  if (hasOffset && offsetMinutes != 0) {
+    timePoint -= minutes{offsetMinutes};
+  }
+
+  return timePoint;
 }
 
 }  // namespace
