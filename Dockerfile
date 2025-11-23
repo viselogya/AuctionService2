@@ -24,8 +24,10 @@ FROM ubuntu:22.04
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
       libpq-dev \
-      libcurl4-openssl-dev && \
-    rm -rf /var/lib/apt/lists/*
+      libcurl4-openssl-dev \
+      ca-certificates && \
+    rm -rf /var/lib/apt/lists/* && \
+    update-ca-certificates
 
 WORKDIR /app
 
