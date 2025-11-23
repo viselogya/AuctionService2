@@ -1,47 +1,62 @@
 # Auction Service
 
-Auction microservice that exposes CRUD and bidding operations for lots, integrates with Supabase/PostgreSQL through `libpq`, registers itself in a service registry, and validates requests against an external payment service.
+Сервис аукционов на C++20. Реализует CRUD и аукционные операции со ставками, работает с Supabase/PostgreSQL через `libpq`, регистрирует методы в сервис-реестре и проверяет токены через внешний платежный сервис.
 
-## Project Layout
+## Структура проекта
 
 ```
-/include/auction     Public headers
-/src                 Implementation (core, repository, service, api)
-main.cpp             Application entry point
-Dockerfile           Multi-stage build for deployment
-CMakeLists.txt       Build configuration
-README.md            This document
+/include/auction     Публичные заголовки
+/src                 Реализация (core, repository, service, api)
+main.cpp             Точка входа приложения
+Dockerfile           Многоэтапная сборка Docker
+CMakeLists.txt       Конфигурация CMake
+README.md            Документация
 ```
 
-## Environment Variables
+## Переменные окружения
 
-| Variable | Description | Required |
-|----------|-------------|----------|
-| `SUPABASE_HOST` | Supabase/PostgreSQL host | Yes |
-| `SUPABASE_DB` | Database name | Yes |
-| `SUPABASE_USER` | Database user | Yes |
-| `SUPABASE_PASSWORD` | Database password | Yes |
-| `SUPABASE_PORT` | Database port | Yes |
-| `SERVICE_REGISTRY_URL` | URL for registering methods (`POST`) | Optional (`http://localhost:9000/register`) |
-| `PAYMENT_SERVICE_URL` | Payment service base URL (expects `/verify`) | Optional (`http://localhost:8081`) |
-| `SERVER_HOST` | HTTP server host binding | Optional (`0.0.0.0`) |
-| `SERVER_PORT` | HTTP server port | Optional (`8080`) |
+| Переменная | Назначение | Обязательно |
+|------------|------------|-------------|
+| `SUPABASE_HOST` | Хост Supabase/PostgreSQL | Да |
+| `SUPABASE_DB` | Имя базы данных | Да |
+| `SUPABASE_USER` | Пользователь БД | Да |
+| `SUPABASE_PASSWORD` | Пароль БД | Да |
+| `SUPABASE_PORT` | Порт БД | Да |
+| `SERVICE_REGISTRY_URL` | URL сервис-реестра (POST) | Необязательно (`http://localhost:9000/register`) |
+| `PAYMENT_SERVICE_URL` | Базовый URL платежного сервиса (ожидает `/verify`) | Необязательно (`http://localhost:8081`) |
+| `SERVER_HOST` | Хост HTTP-сервера | Необязательно (`0.0.0.0`) |
+| `SERVER_PORT` | Порт HTTP-сервера | Необязательно (`8080`) |
 
-## Build Prerequisites
+### Пример для вашей Supabase БД
 
-- C++20-capable compiler (GCC 11+, Clang 13+, MSVC 19.3+)
+Строка подключения:  
+`postgresql://postgres.ticisxmomoofsumkolha:SomeHardPassword@aws-1-eu-central-2.pooler.supabase.com:5432/postgres`
+
+Соответственно:
+
+```bash
+export SUPABASE_HOST=aws-1-eu-central-2.pooler.supabase.com
+export SUPABASE_DB=postgres
+export SUPABASE_USER=postgres.ticisxmomoofsumkolha
+export SUPABASE_PASSWORD=SomeHardPassword
+export SUPABASE_PORT=5432
+```
+
+## Требования для сборки
+
+- Компилятор с поддержкой C++20 (GCC 11+, Clang 13+, MSVC 19.3+)
 - CMake 3.18+
-- `libpq` development headers
-- `libcurl` development headers
+- Заголовки и библиотеки `libpq`
+- Заголовки и библиотеки `libcurl`
 
-### Configure & Build
+### Конфигурация и сборка
 
 ```bash
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --target auction_service
 ```
 
-### Run Locally
+### Запуск локально
 
 ```bash
 export SUPABASE_HOST=...
@@ -49,17 +64,17 @@ export SUPABASE_DB=...
 export SUPABASE_USER=...
 export SUPABASE_PASSWORD=...
 export SUPABASE_PORT=...
-# optionally:
+# по желанию:
 export PAYMENT_SERVICE_URL=https://payments.example.com
 export SERVICE_REGISTRY_URL=https://registry.example.com/register
 ./build/auction_service
 ```
 
-The server listens on `SERVER_HOST:SERVER_PORT` (default `0.0.0.0:8080`).
+По умолчанию сервис слушает `SERVER_HOST:SERVER_PORT` (`0.0.0.0:8080`).
 
-## Database Schema
+## Схема базы данных
 
-The service ensures the following schema (executed on startup):
+При старте сервис гарантирует наличие таблицы и индексов:
 
 ```sql
 CREATE TABLE IF NOT EXISTS lots (
@@ -79,7 +94,7 @@ CREATE INDEX IF NOT EXISTS idx_lots_auction_end_date ON lots(auction_end_date);
 
 ## Docker
 
-Build and run using the provided multi-stage Dockerfile:
+Сборка и запуск через готовый Dockerfile:
 
 ```bash
 docker build -t auction-service .
@@ -94,43 +109,43 @@ docker run --rm -p 8080:8080 \
   auction-service
 ```
 
-## Deploy on Railway
+## Деплой на Railway
 
-1. Log in and initialize:
+1. Авторизация и инициализация проекта:
    ```bash
    railway login
    railway init
    ```
-2. Configure environment variables (`railway variables set ...`) for all Supabase credentials, `PAYMENT_SERVICE_URL`, `SERVICE_REGISTRY_URL`, and optional `SERVER_PORT`.
-3. Deploy:
+2. Задайте переменные окружения (`railway variables set ...`) для Supabase, `PAYMENT_SERVICE_URL`, `SERVICE_REGISTRY_URL` и при необходимости `SERVER_PORT`.
+3. Деплой:
    ```bash
    railway up
    ```
 
-Railway will build the Docker image and run the `auction_service` binary.
+Railway соберёт Docker-образ и запустит бинарник `auction_service`.
 
-## API Endpoints
+## HTTP API
 
-> All endpoints except `GET /health` require `Authorization: Bearer <token>` header. Tokens are verified by `POST <PAYMENT_SERVICE_URL>/verify` with payload `{"token": "<token>"}`.
+> Все методы, кроме `GET /health`, требуют заголовок `Authorization: Bearer <token>`. Токен проверяется запросом `POST <PAYMENT_SERVICE_URL>/verify` с телом `{"token": "<token>"}`.
 
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/health` | Health check (no auth) |
-| `GET` | `/lots` | List all lots |
-| `GET` | `/lots/{id}` | Retrieve a lot |
-| `POST` | `/lots` | Create a lot |
-| `POST` | `/lots/{id}/bid` | Place a bid on a lot |
+| Метод | Путь | Описание |
+|-------|------|----------|
+| `GET` | `/health` | Health-check (без авторизации) |
+| `GET` | `/lots` | Список всех лотов |
+| `GET` | `/lots/{id}` | Получить лот по идентификатору |
+| `POST` | `/lots` | Создать лот |
+| `POST` | `/lots/{id}/bid` | Сделать ставку на лот |
 
-### Sample Requests
+### Примеры запросов
 
 ```bash
-# Health (no token required)
+# Health (без токена)
 curl http://localhost:8080/health
 
-# List lots
+# Список лотов
 curl -H "Authorization: Bearer $TOKEN" http://localhost:8080/lots
 
-# Create lot
+# Создать лот
 curl -X POST http://localhost:8080/lots \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
@@ -142,15 +157,15 @@ curl -X POST http://localhost:8080/lots \
     "auction_end_date": "2025-12-31T18:00:00+00"
   }'
 
-# Place bid
+# Сделать ставку
 curl -X POST http://localhost:8080/lots/1/bid \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{ "amount": 200.00 }'
 
-# Get single lot
+# Получить конкретный лот
 curl -H "Authorization: Bearer $TOKEN" http://localhost:8080/lots/1
 ```
 
-Responses are JSON-encoded and include validation errors where applicable.
+Все ответы возвращаются в формате JSON и содержат сообщения об ошибках при неверных данных.
 
