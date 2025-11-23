@@ -1,0 +1,25 @@
+# Build directories
+/build/
+/out/
+
+# VSCode / IDE
+.vscode/
+.idea/
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+
+# Windows
+Thumbs.db
+*.user
+*.suo
+*.VC.db
+*.VC.opendb
+
+# Misc
+*.log
+
+
