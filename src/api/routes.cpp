@@ -20,7 +20,8 @@ void respondJson(httplib::Response& res, int status, const nlohmann::json& body)
   }
 }
 
-bool requireAuth(const httplib::Request& req, httplib::Response& res, core::AuthService& authService) {
+bool requireAuth(const httplib::Request& req, httplib::Response& res, core::AuthService& authService,
+                 const std::string& methodName) {
   const auto& authHeader = req.get_header_value("Authorization");
   if (authHeader.empty()) {
     respondJson(res, 401, {{"error", "Missing Authorization header"}});
@@ -35,7 +36,7 @@ bool requireAuth(const httplib::Request& req, httplib::Response& res, core::Auth
 
   const std::string token = authHeader.substr(bearer.size());
   try {
-    if (!authService.verifyToken(token)) {
+    if (!authService.verifyToken(token, methodName)) {
       respondJson(res, 403, {{"error", "Invalid token"}});
       return false;
     }
@@ -87,12 +88,12 @@ void applyLotPatch(model::Lot& lot, const nlohmann::json& body) {
 std::vector<core::ApiMethod> registerRoutes(httplib::Server& server, service::LotService& lotService,
                                             core::AuthService& authService) {
   std::vector<core::ApiMethod> methods = {
-      {.methodName = "GET /lots", .price = 0.0, .isPrivate = false, .arguments = {}},
-      {.methodName = "GET /lots/{id}",
+      {.methodName = "ListLots", .price = 0.0, .isPrivate = false, .arguments = {}},
+      {.methodName = "GetLot",
        .price = 0.0,
        .isPrivate = false,
        .arguments = {makeArgument(1, "id", "int", true)}},
-      {.methodName = "POST /lots",
+      {.methodName = "CreateLot",
        .price = 0.0,
        .isPrivate = false,
        .arguments =
@@ -103,7 +104,7 @@ std::vector<core::ApiMethod> registerRoutes(httplib::Server& server, service::Lo
                makeArgument(4, "owner_id", "string", true),
                makeArgument(5, "auction_end_date", "timestamp", false),
            }},
-      {.methodName = "PUT /lots/{id}",
+      {.methodName = "UpdateLot",
        .price = 0.0,
        .isPrivate = false,
        .arguments =
@@ -114,15 +115,15 @@ std::vector<core::ApiMethod> registerRoutes(httplib::Server& server, service::Lo
                makeArgument(4, "owner_id", "string", false),
                makeArgument(5, "auction_end_date", "timestamp", false),
            }},
-      {.methodName = "DELETE /lots/{id}",
+      {.methodName = "DeleteLot",
        .price = 0.0,
        .isPrivate = false,
        .arguments = {makeArgument(1, "id", "int", true)}},
-      {.methodName = "POST /lots/{id}/bid",
+      {.methodName = "PlaceBid",
        .price = 0.0,
        .isPrivate = false,
        .arguments = {makeArgument(1, "id", "int", true), makeArgument(2, "amount", "decimal", true)}},
-      {.methodName = "GET /health", .price = 0.0, .isPrivate = false, .arguments = {}},
+      {.methodName = "Health", .price = 0.0, .isPrivate = false, .arguments = {}},
   };
 
   server.Get("/health", [](const httplib::Request&, httplib::Response& res) {
@@ -130,7 +131,7 @@ std::vector<core::ApiMethod> registerRoutes(httplib::Server& server, service::Lo
   });
 
   server.Get("/lots", [&lotService, &authService](const httplib::Request& req, httplib::Response& res) {
-    if (!requireAuth(req, res, authService)) {
+    if (!requireAuth(req, res, authService, "ListLots")) {
       return;
     }
 
@@ -148,7 +149,7 @@ std::vector<core::ApiMethod> registerRoutes(httplib::Server& server, service::Lo
 
   server.Get(R"(/lots/(\d+))",
              [&lotService, &authService](const httplib::Request& req, httplib::Response& res) {
-               if (!requireAuth(req, res, authService)) {
+               if (!requireAuth(req, res, authService, "GetLot")) {
                  return;
                }
 
@@ -168,7 +169,7 @@ std::vector<core::ApiMethod> registerRoutes(httplib::Server& server, service::Lo
              });
 
   server.Post("/lots", [&lotService, &authService](const httplib::Request& req, httplib::Response& res) {
-    if (!requireAuth(req, res, authService)) {
+    if (!requireAuth(req, res, authService, "CreateLot")) {
       return;
     }
 
@@ -187,7 +188,7 @@ std::vector<core::ApiMethod> registerRoutes(httplib::Server& server, service::Lo
 
   server.Put(R"(/lots/(\d+))",
              [&lotService, &authService](const httplib::Request& req, httplib::Response& res) {
-               if (!requireAuth(req, res, authService)) {
+               if (!requireAuth(req, res, authService, "UpdateLot")) {
                  return;
                }
 
@@ -218,7 +219,7 @@ std::vector<core::ApiMethod> registerRoutes(httplib::Server& server, service::Lo
 
   server.Delete(R"(/lots/(\d+))",
                 [&lotService, &authService](const httplib::Request& req, httplib::Response& res) {
-                  if (!requireAuth(req, res, authService)) {
+                  if (!requireAuth(req, res, authService, "DeleteLot")) {
                     return;
                   }
 
@@ -238,7 +239,7 @@ std::vector<core::ApiMethod> registerRoutes(httplib::Server& server, service::Lo
 
   server.Post(R"(/lots/(\d+)/bid)",
               [&lotService, &authService](const httplib::Request& req, httplib::Response& res) {
-                if (!requireAuth(req, res, authService)) {
+                if (!requireAuth(req, res, authService, "PlaceBid")) {
                   return;
                 }
 

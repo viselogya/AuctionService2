@@ -32,19 +32,33 @@ std::string AuthService::resolveBaseUrl() {
   return "http://localhost:8081";
 }
 
-AuthService::AuthService(TokenCache& cache) : verifyUrl_(joinUrl(resolveBaseUrl(), "/verify")), cache_(cache) {}
+std::string AuthService::resolveServiceName() {
+  if (const char* value = std::getenv("SERVICE_NAME"); value != nullptr && *value != '\0') {
+    return std::string{value};
+  }
+  return "AuctionService";
+}
 
-bool AuthService::verifyToken(const std::string& token) {
+AuthService::AuthService(TokenCache& cache)
+    : verifyUrl_(joinUrl(resolveBaseUrl(), "/token/check")), serviceName_(resolveServiceName()), cache_(cache) {}
+
+bool AuthService::verifyToken(const std::string& token, const std::string& methodName) {
   if (token.empty()) {
     return false;
   }
 
-  if (auto cached = cache_.get(token)) {
+  const std::string cacheKey = token + "::" + methodName;
+  if (auto cached = cache_.get(cacheKey)) {
     return *cached;
   }
 
-  const nlohmann::json payload = {{"token", token}};
+  const nlohmann::json payload = {{"token", token}, {"serviceName", serviceName_}, {"methodName", methodName}};
   const auto response = httpClient_.postJson(verifyUrl_, payload);
+
+  if (response.status == 401 || response.status == 403) {
+    cache_.put(cacheKey, false);
+    return false;
+  }
 
   if (response.status != 200) {
     throw std::runtime_error("Token verification service returned status " + std::to_string(response.status));
@@ -52,9 +66,9 @@ bool AuthService::verifyToken(const std::string& token) {
 
   try {
     const auto json = nlohmann::json::parse(response.body);
-    const bool valid = json.value("valid", false);
-    cache_.put(token, valid);
-    return valid;
+    const bool allowed = json.value("allowed", false);
+    cache_.put(cacheKey, allowed);
+    return allowed;
   } catch (const nlohmann::json::exception& ex) {
     throw std::runtime_error(std::string{"Failed to parse token verification response: "} + ex.what());
   }

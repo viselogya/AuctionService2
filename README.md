@@ -23,7 +23,8 @@ README.md            Документация
 | `SUPABASE_PASSWORD` | Пароль БД | Да |
 | `SUPABASE_PORT` | Порт БД | Да |
 | `SERVICE_REGISTRY_URL` | Базовый URL сервис-реестра (POST `/service`) | Необязательно (`http://localhost:9000`) |
-| `PAYMENT_SERVICE_URL` | Базовый URL платежного сервиса (ожидает `/verify`) | Необязательно (`http://localhost:8081`) |
+| `PAYMENT_SERVICE_URL` | Базовый URL платежного сервиса (эндпоинты `/bill`, `/pay`, `/token/check`) | Необязательно (`http://localhost:8081`) |
+| `SERVICE_NAME` | Имя сервиса при регистрации и проверке токенов | Необязательно (`AuctionService`) |
 | `SERVER_HOST` | Хост HTTP-сервера | Необязательно (`0.0.0.0`) |
 | `SERVER_PORT` | Порт HTTP-сервера | Необязательно (`8080`) |
 
