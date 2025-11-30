@@ -22,7 +22,7 @@ README.md            Документация
 | `SUPABASE_USER` | Пользователь БД | Да |
 | `SUPABASE_PASSWORD` | Пароль БД | Да |
 | `SUPABASE_PORT` | Порт БД | Да |
-| `SERVICE_REGISTRY_URL` | URL сервис-реестра (POST) | Необязательно (`http://localhost:9000/register`) |
+| `SERVICE_REGISTRY_URL` | Базовый URL сервис-реестра (POST `/service`) | Необязательно (`http://localhost:9000`) |
 | `PAYMENT_SERVICE_URL` | Базовый URL платежного сервиса (ожидает `/verify`) | Необязательно (`http://localhost:8081`) |
 | `SERVER_HOST` | Хост HTTP-сервера | Необязательно (`0.0.0.0`) |
 | `SERVER_PORT` | Порт HTTP-сервера | Необязательно (`8080`) |
@@ -66,7 +66,7 @@ export SUPABASE_PASSWORD=...
 export SUPABASE_PORT=...
 # по желанию:
 export PAYMENT_SERVICE_URL=https://payments.example.com
-export SERVICE_REGISTRY_URL=https://registry.example.com/register
+export SERVICE_REGISTRY_URL=https://registry.example.com
 ./build/auction_service
 ```
 
@@ -105,7 +105,7 @@ docker run --rm -p 8080:8080 \
   -e SUPABASE_PASSWORD=... \
   -e SUPABASE_PORT=... \
   -e PAYMENT_SERVICE_URL=https://payments.example.com \
-  -e SERVICE_REGISTRY_URL=https://registry.example.com/register \
+  -e SERVICE_REGISTRY_URL=https://registry.example.com \
   auction-service
 ```
 
@@ -134,6 +134,8 @@ Railway соберёт Docker-образ и запустит бинарник `a
 | `GET` | `/lots` | Список всех лотов |
 | `GET` | `/lots/{id}` | Получить лот по идентификатору |
 | `POST` | `/lots` | Создать лот |
+| `PUT` | `/lots/{id}` | Обновить лот |
+| `DELETE` | `/lots/{id}` | Удалить лот |
 | `POST` | `/lots/{id}/bid` | Сделать ставку на лот |
 
 ### Примеры запросов
@@ -157,14 +159,20 @@ curl -X POST http://localhost:8080/lots \
     "auction_end_date": "2025-12-31T18:00:00+00"
   }'
 
+# Обновить лот
+curl -X PUT http://localhost:8080/lots/1 \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{ "name": "Updated name", "owner_id": "user-456" }'
+
 # Сделать ставку
 curl -X POST http://localhost:8080/lots/1/bid \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{ "amount": 200.00 }'
 
-# Получить конкретный лот
-curl -H "Authorization: Bearer $TOKEN" http://localhost:8080/lots/1
+# Удалить лот
+curl -X DELETE -H "Authorization: Bearer $TOKEN" http://localhost:8080/lots/1
 ```
 
 Все ответы возвращаются в формате JSON и содержат сообщения об ошибках при неверных данных.
