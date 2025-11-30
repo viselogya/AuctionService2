@@ -7,10 +7,18 @@
 
 namespace auction::core {
 
+struct ApiArgument {
+  int argumentNumber;
+  std::string argumentName;
+  std::string argumentType;
+  bool isRequired;
+};
+
 struct ApiMethod {
-  std::string name;
-  std::string path;
-  std::string description;
+  std::string methodName;
+  double price;
+  bool isPrivate;
+  std::vector<ApiArgument> arguments;
 };
 
 class ServiceRegistry {

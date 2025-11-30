@@ -45,14 +45,39 @@ bool requireAuth(const httplib::Request& req, httplib::Response& res, core::Auth
 
 }  // namespace
 
+core::ApiArgument makeArgument(int number, std::string name, std::string type, bool required) {
+  return core::ApiArgument{
+      .argumentNumber = number,
+      .argumentName = std::move(name),
+      .argumentType = std::move(type),
+      .isRequired = required,
+  };
+}
+
 std::vector<core::ApiMethod> registerRoutes(httplib::Server& server, service::LotService& lotService,
                                             core::AuthService& authService) {
   std::vector<core::ApiMethod> methods = {
-      {"ListLots", "/lots", "GET - Return all lots"},
-      {"GetLot", "/lots/{id}", "GET - Return lot by id"},
-      {"CreateLot", "/lots", "POST - Create a new lot"},
-      {"PlaceBid", "/lots/{id}/bid", "POST - Place a bid on a lot"},
-      {"Health", "/health", "GET - Health check"},
+      {.methodName = "GET /lots", .price = 0.0, .isPrivate = false, .arguments = {}},
+      {.methodName = "GET /lots/{id}",
+       .price = 0.0,
+       .isPrivate = false,
+       .arguments = {makeArgument(1, "id", "int", true)}},
+      {.methodName = "POST /lots",
+       .price = 0.0,
+       .isPrivate = false,
+       .arguments =
+           {
+               makeArgument(1, "name", "string", true),
+               makeArgument(2, "description", "string", false),
+               makeArgument(3, "start_price", "decimal", true),
+               makeArgument(4, "owner_id", "string", true),
+               makeArgument(5, "auction_end_date", "timestamp", false),
+           }},
+      {.methodName = "POST /lots/{id}/bid",
+       .price = 0.0,
+       .isPrivate = false,
+       .arguments = {makeArgument(1, "id", "int", true), makeArgument(2, "amount", "decimal", true)}},
+      {.methodName = "GET /health", .price = 0.0, .isPrivate = false, .arguments = {}},
   };
 
   server.Get("/health", [](const httplib::Request&, httplib::Response& res) {

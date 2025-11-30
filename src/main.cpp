@@ -50,8 +50,13 @@ int main() {
     httplib::Server server;
     auto methods = auction::api::registerRoutes(server, lotService, authService);
 
-    auction::core::ServiceRegistry registry;
-    registry.registerMethods(methods);
+    try {
+      auction::core::ServiceRegistry registry;
+      registry.registerMethods(methods);
+      std::cout << "Service registry updated successfully" << std::endl;
+    } catch (const std::exception& ex) {
+      std::cerr << "Warning: failed to register service in registry: " << ex.what() << std::endl;
+    }
 
     const std::string host = requireEnvOrDefault("SERVER_HOST", "0.0.0.0");
     const int port = std::stoi(requireEnvOrDefault("SERVER_PORT", "8080"));

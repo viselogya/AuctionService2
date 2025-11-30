@@ -2,25 +2,65 @@
 
 #include <cstdlib>
 #include <stdexcept>
+#include <string_view>
 
 namespace auction::core {
 
+namespace {
+
+std::string normalizeServiceEndpoint(std::string baseUrl) {
+  if (baseUrl.empty()) {
+    return "http://localhost:9000/service";
+  }
+
+  // Trim trailing slash to avoid double slashes
+  while (!baseUrl.empty() && baseUrl.back() == '/') {
+    baseUrl.pop_back();
+  }
+
+  constexpr std::string_view suffix = "/service";
+  if (baseUrl.size() >= suffix.size()) {
+    const auto pos = baseUrl.rfind(suffix);
+    if (pos != std::string::npos && pos == baseUrl.size() - suffix.size()) {
+      return baseUrl;  // already contains /service
+    }
+  }
+
+  return baseUrl + std::string{suffix};
+}
+
+}  // namespace
+
 std::string ServiceRegistry::resolveRegistryUrl() {
   if (const char* value = std::getenv("SERVICE_REGISTRY_URL"); value != nullptr && *value != '\0') {
-    return std::string{value};
+    return normalizeServiceEndpoint(value);
   }
-  return "http://localhost:9000/register";
+  return "http://localhost:9000/service";
 }
 
 ServiceRegistry::ServiceRegistry() : registryUrl_(resolveRegistryUrl()) {}
 
 void ServiceRegistry::registerMethods(const std::vector<ApiMethod>& methods) const {
   nlohmann::json payload;
-  payload["service_name"] = "auction";
+  payload["serviceName"] = "auction";
 
   nlohmann::json methodsJson = nlohmann::json::array();
   for (const auto& method : methods) {
-    methodsJson.push_back({{"name", method.name}, {"path", method.path}, {"description", method.description}});
+    nlohmann::json methodJson;
+    methodJson["methodName"] = method.methodName;
+    methodJson["price"] = method.price;
+    methodJson["isPrivate"] = method.isPrivate;
+
+    nlohmann::json argumentsJson = nlohmann::json::array();
+    for (const auto& arg : method.arguments) {
+      argumentsJson.push_back({{"argumentNumber", arg.argumentNumber},
+                               {"argumentName", arg.argumentName},
+                               {"argumentType", arg.argumentType},
+                               {"isRequired", arg.isRequired}});
+    }
+
+    methodJson["arguments"] = std::move(argumentsJson);
+    methodsJson.push_back(std::move(methodJson));
   }
   payload["methods"] = std::move(methodsJson);
 
