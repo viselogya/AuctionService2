@@ -37,8 +37,30 @@ class CurlGlobalGuard {
   ~CurlGlobalGuard() { curl_global_cleanup(); }
 };
 
+void logEnvVar(const char* name) {
+  const char* value = std::getenv(name);
+  if (value != nullptr && *value != '\0') {
+    std::cerr << "ENV " << name << " = " << value << std::endl;
+  } else {
+    std::cerr << "ENV " << name << " = (not set)" << std::endl;
+  }
+}
+
 int main() {
   try {
+    std::cerr << "=== Environment Variables ===" << std::endl;
+    logEnvVar("PAYMENT_SERVICE_URL");
+    logEnvVar("SERVICE_REGISTRY_URL");
+    logEnvVar("SERVICE_NAME");
+    logEnvVar("SERVER_HOST");
+    logEnvVar("SERVER_PORT");
+    logEnvVar("PORT");
+    logEnvVar("SUPABASE_HOST");
+    logEnvVar("SUPABASE_PORT");
+    logEnvVar("SUPABASE_DB");
+    logEnvVar("SUPABASE_USER");
+    std::cerr << "==============================" << std::endl;
+
     CurlGlobalGuard curlGuard;
 
     auction::core::Database database;
