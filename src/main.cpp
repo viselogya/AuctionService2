@@ -59,7 +59,8 @@ int main() {
     }
 
     const std::string host = requireEnvOrDefault("SERVER_HOST", "0.0.0.0");
-    const int port = std::stoi(requireEnvOrDefault("SERVER_PORT", "8080"));
+    const std::string portString = requireEnvOrDefault("SERVER_PORT", requireEnvOrDefault("PORT", "8080"));
+    const int port = std::stoi(portString);
 
     std::cout << "Auction service is starting on " << host << ":" << port << std::endl;
     if (!server.listen(host.c_str(), port)) {
