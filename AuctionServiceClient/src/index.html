@@ -1,0 +1,663 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Электронный аукцион — клиент</title>
+<style>
+body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial; padding: 18px; color:#111; }
+h1 { font-size: 20px; margin-bottom: 8px; }
+.controls { margin-bottom: 12px; display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+input, button, select { padding:6px 8px; font-size:14px; }
+table { border-collapse: collapse; width:100%; margin-top:12px; }
+th, td { border:1px solid #ddd; padding:8px; text-align:left; }
+th { background:#f2f2f2; }
+.small { font-size:12px; color:#666; }
+.btn { padding:6px 10px; cursor:pointer; border:1px solid #888; background:#fff; border-radius:6px; }
+.btn-primary { background:#2563eb; color:white; border-color:transparent; }
+.btn-danger { background:#ef4444; color:white; border-color:transparent; }
+.inline-edit { min-width:120px; }
+.token-info { font-size:12px; margin-left:8px; }
+.error { color:#b91c1c; font-weight:600; }
+.success { color:#065f46; font-weight:600; }
+#bidModal { display:none; position:fixed; left:0; top:0; right:0; bottom:0; background: rgba(0,0,0,0.4); align-items:center; justify-content:center; }
+#bidModal .panel { background:white; padding:16px; border-radius:8px; width:320px; }
+#newLotForm { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+#newLotForm input { width:200px; }
+</style>
+</head>
+<body>
+
+<h1>Клиент: Электронный аукцион — продажа земельных участков</h1>
+
+<div class="controls">
+  <label class="small">Auction URL:
+    <input id="cfgAuctionUrl" value="https://auctionservice2-production.up.railway.app" style="width:220px"/>
+  </label>
+  <label class="small">Payment URL:
+    <input id="cfgPaymentUrl" value="https://payment-service-15044579133.europe-central2.run.app" style="width:220px"/>
+  </label>
+  <label class="small">Organization ID:
+    <input id="cfgOrgId" value="org-123" style="width:140px"/>
+  </label>
+  <button class="btn btn-primary" id="btnRequestBill">Сформировать счет</button>
+  <button class="btn btn-primary" id="btnPayBill">Оплатить счет</button>
+  <div style="margin-left:auto; display:flex; align-items:center;">
+    <button class="btn" id="btnShowTokens">Токены</button>
+    <div id="tokenStatus" class="token-info"></div>
+  </div>
+</div>
+
+<div id="messages"></div>
+
+<h3>Добавить новый лот</h3>
+<form id="newLotForm">
+  <input id="new_name" placeholder="Название" required/>
+  <input id="new_start_price" placeholder="Стартовая цена" type="number" step="0.01" required/>
+  <input id="new_auction_end_date" placeholder="Дата окончания (гггг-мм-дд)" value=""/>
+  <input id="new_description" placeholder="Описание"/>
+  <input id="new_owner_id" placeholder="ID владельца" value="org-123" required/>
+  <button class="btn btn-primary" type="submit">Создать (CreateLot)</button>
+</form>
+
+<h3>Список лотов</h3>
+<div class="small">Двойной клик на ячейке — редактировать. Сохранить — UpdateLot. Создание/удаление/ставки — платные методы.</div>
+
+<table id="lotsTable">
+  <thead>
+    <tr>
+      <th>ID</th>
+      <th>Название</th>
+      <th>Описание</th>
+      <th>Стартовая цена</th>
+      <th>Текущая цена</th>
+      <th>Владелец</th>
+      <th>Окончание аукциона</th>
+      <th>Действия</th>
+    </tr>
+  </thead>
+  <tbody></tbody>
+</table>
+
+<div id="bidModal">
+  <div class="panel">
+    <h4>Сделать ставку</h4>
+    <div id="bidLotInfo"></div>
+    <div style="margin-top:8px">
+      <input id="bid_amount" type="number" step="0.01" placeholder="Сумма ставки" style="width:150px"/>
+      <button class="btn btn-primary" id="btnPlaceBid">Поставить (PlaceBid)</button>
+      <button class="btn" id="btnCloseBid">Отмена</button>
+    </div>
+    <div id="bidMessage" class="small" style="margin-top:8px"></div>
+  </div>
+</div>
+
+<script>
+const cfg = {
+  get auctionUrl(){ return document.getElementById('cfgAuctionUrl').value.replace(/\/+$/,''); },
+  get paymentUrl(){ return document.getElementById('cfgPaymentUrl').value.replace(/\/+$/,''); },
+  get orgId(){ return document.getElementById('cfgOrgId').value.trim(); },
+  serviceName: "AuctionServiceRelease" // Исправлено для совпадения с сервером
+};
+
+// Конфигурация прокси
+const PROXY_CONFIG = {
+  enabled: true,
+  endpoint: '/api/proxy'
+};
+
+const state = {
+  lots: [],
+  editing: new Map(),
+  paymentArtifact: null,
+  tokens: loadTokens()
+};
+
+function showMessage(text,type='info',ttl=4000){
+  const box = document.getElementById('messages');
+  box.innerHTML=`<div class="${type==='error'?'error':type==='success'?'success':''}">${text}</div>`;
+  if(ttl>0)setTimeout(()=>{ if(box.innerHTML.includes(text)) box.innerHTML=''; },ttl);
+}
+
+function loadTokens(){ try { return JSON.parse(localStorage.getItem('auction_tokens')||'{}'); } catch(e){ return {}; } }
+function saveTokens(){ localStorage.setItem('auction_tokens',JSON.stringify(state.tokens)); updateTokenStatusUI(); }
+
+function updateTokenStatusUI(){
+  const el = document.getElementById('tokenStatus');
+  const keys = Object.keys(state.tokens);
+  
+  if(keys.length===0){ 
+    el.textContent='Нет токенов'; 
+    el.style.color = '#dc2626';
+    return; 
+  }
+  
+  let soonest = null;
+  let methodsList = [];
+  keys.forEach(k=>{
+    const t = state.tokens[k];
+    if(!t || !t.token) return;
+    if(t.expiresAt){
+      const d = new Date(t.expiresAt);
+      if(isNaN(d)) return;
+      if(!soonest || d < soonest) soonest = d;
+    }
+    methodsList.push(k);
+  });
+  
+  el.textContent = `${methodsList.length} метод(ов): ${methodsList.join(', ')}`;
+  el.style.color = '#16a34a';
+  
+  if(soonest){
+    el.textContent += ` (до ${soonest.toLocaleDateString('ru-RU')})`;
+  }
+}
+
+// получение токена для конкретного метода
+function tokenForMethod(method){
+  const info=state.tokens[method];
+  if(!info) return null;
+  if(info.expiresAt && new Date(info.expiresAt).getTime() < Date.now()){
+    delete state.tokens[method];
+    saveTokens();
+    return null;
+  }
+  return info.token;
+}
+
+// Улучшенная функция fetch с поддержкой прокси
+async function fetchWithProxy(url, options = {}) {
+  if (!PROXY_CONFIG.enabled || url.startsWith('/') || url.includes(location.origin)) {
+    return await directFetch(url, options);
+  }
+  
+  try {
+    const proxyResponse = await fetch(PROXY_CONFIG.endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        url: url,
+        options: options
+      })
+    });
+    
+    if (!proxyResponse.ok) {
+      const errorText = await proxyResponse.text();
+      throw new Error(`Proxy error: ${proxyResponse.status} - ${errorText}`);
+    }
+    
+    return await proxyResponse.json();
+    
+  } catch (proxyError) {
+    console.warn('Proxy failed, trying direct request:', proxyError.message);
+    
+    try {
+      return await directFetch(url, options);
+    } catch (directError) {
+      return await fetchWithPublicProxy(url, options);
+    }
+  }
+}
+
+// Прямой fetch запрос
+async function directFetch(url, options = {}) {
+  const response = await fetch(url, {
+    ...options,
+    headers: {
+      'Accept': 'application/json',
+      'Content-Type': 'application/json',
+      ...options.headers
+    }
+  });
+  
+  const text = await response.text();
+  let body = null;
+  
+  try {
+    body = text ? JSON.parse(text) : null;
+  } catch (e) {
+    console.warn('JSON parse error:', e);
+    body = { text: text };
+  }
+  
+  if (!response.ok) {
+    const err = new Error(body?.error || body?.message || body?.text || `HTTP ${response.status}`);
+    err.status = response.status;
+    err.body = body;
+    throw err;
+  }
+  
+  return body;
+}
+
+// Использование публичных CORS прокси в крайнем случае
+async function fetchWithPublicProxy(url, options = {}) {
+  const publicProxies = [
+    'https://api.allorigins.win/raw?url=',
+    'https://corsproxy.io/?',
+    'https://thingproxy.freeboard.io/fetch/'
+  ];
+  
+  for (const proxy of publicProxies) {
+    try {
+      const proxyUrl = proxy + encodeURIComponent(url);
+      const response = await fetch(proxyUrl, options);
+      
+      if (response.ok) {
+        const text = await response.text();
+        return text ? JSON.parse(text) : null;
+      }
+    } catch (e) {
+      console.warn(`Public proxy ${proxy} failed:`, e.message);
+    }
+  }
+  
+  throw new Error('All fetch methods failed');
+}
+
+// Основная функция для всех запросов с авторизацией
+async function fetchJson(url, options = {}, methodName = null) {
+  // Автоматически добавляем токен авторизации для платных методов
+  if (methodName) {
+    const token = tokenForMethod(methodName);
+    if (token) {
+      options.headers = {
+        ...options.headers,
+        'Authorization': 'Bearer ' + token
+      };
+    } else {
+      showMessage(`Для метода "${methodName}" требуется оплата. Сформируйте и оплатите счет.`, 'error');
+      throw new Error(`Token required for ${methodName}`);
+    }
+  }
+  
+  return await fetchWithProxy(url, options);
+}
+
+/* ====== Payment ====== */
+async function requestBill(periodFrom, periodTo, methods) {
+  try {
+    const payload = { 
+      serviceName: cfg.serviceName, 
+      dateFrom: periodFrom, 
+      dateTo: periodTo, 
+      methods 
+    };
+    
+    const body = await fetchJson(cfg.paymentUrl + '/bill', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    
+    state.paymentArtifact = body.paymentArtifact;
+    showMessage(`Счёт сформирован. Артефакт: ${body.paymentArtifact}`, 'success');
+  } catch(err) { 
+    console.error(err); 
+    showMessage('Ошибка формирования счета: ' + (err.body?.description || err.message || err.toString()), 'error'); 
+  }
+}
+
+async function payBill() {
+  if (!state.paymentArtifact) { 
+    showMessage('Сначала сформируйте счёт', 'error'); 
+    return; 
+  }
+  
+  try {
+    const payload = { paymentArtifact: state.paymentArtifact };
+    const body = await fetchJson(cfg.paymentUrl + '/pay', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    
+    if (!body.token) { 
+      showMessage('Ошибка: токен не получен', 'error'); 
+      return; 
+    }
+    
+    const info = await fetchJson(cfg.paymentUrl + '/payment/info', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ paymentArtifact: state.paymentArtifact })
+    });
+    
+    info.methods.forEach(m => {
+      state.tokens[m] = { 
+        token: body.token, 
+        expiresAt: info.paidUntil || null 
+      };
+    });
+    
+    saveTokens();
+    showMessage('Оплата прошла успешно. Токены для методов получены', 'success');
+    state.paymentArtifact = null;
+  } catch(err) { 
+    console.error(err); 
+    showMessage('Оплата не удалась: ' + (err.body?.description || err.message || err.toString()), 'error'); 
+  }
+}
+
+/* ====== CRUD + Bid ====== */
+async function loadLots() {
+  try {
+    // Исправлено: добавлен methodName для авторизации
+    const body = await fetchJson(cfg.auctionUrl + '/lots', {}, 'ListLots');
+    state.lots = Array.isArray(body) ? body : [];
+    renderTable();
+    showMessage('Лоты загружены', 'success', 1500);
+  } catch(err) { 
+    console.error(err); 
+    showMessage('Не удалось загрузить лоты: ' + (err.body?.error || err.message || err.toString()), 'error'); 
+  }
+}
+
+function renderTable() {
+  const tbody = document.querySelector('#lotsTable tbody');
+  tbody.innerHTML = '';
+  
+  for (const lot of state.lots) {
+    const tr = document.createElement('tr');
+    tr.dataset.id = lot.id;
+    tr.innerHTML = `
+      <td>${lot.id}</td>
+      <td class="editable" data-field="name">${escapeHtml(lot.name ?? '')}</td>
+      <td class="editable" data-field="description">${escapeHtml(lot.description ?? '')}</td>
+      <td>${lot.start_price ?? 0}</td>
+      <td>${lot.current_price ?? '-'}</td>
+      <td class="editable" data-field="owner_id">${escapeHtml(lot.owner_id ?? '')}</td>
+      <td class="editable" data-field="auction_end_date">${escapeHtml(formatDateForDisplay(lot.auction_end_date ?? ''))}</td>
+      <td>
+        <button class="btn" data-action="save">Save</button>
+        <button class="btn" data-action="delete">Delete</button>
+        <button class="btn" data-action="bid">Bid</button>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  }
+
+  // Редактирование по двойному клику
+  document.querySelectorAll('#lotsTable td.editable').forEach(td => {
+    td.ondblclick = () => {
+      const prev = td.textContent;
+      td.contentEditable = "true";
+      td.classList.add('editing');
+      td.focus();
+      
+      td.onblur = () => {
+        td.contentEditable = "false";
+        td.onblur = null;
+        const id = td.parentElement.dataset.id;
+        const field = td.dataset.field;
+        
+        if (!state.editing[id]) state.editing[id] = {};
+        state.editing[id][field] = td.textContent.trim();
+      };
+    };
+  });
+
+  // Обработчики кнопок
+  document.querySelectorAll('#lotsTable button').forEach(btn => {
+    btn.onclick = async (e) => {
+      const tr = e.target.closest('tr');
+      const id = tr.dataset.id;
+      const action = e.target.dataset.action;
+      
+      if (action === 'save') await handleSave(id, tr);
+      if (action === 'delete') await handleDelete(id);
+      if (action === 'bid') await openBidModal(id);
+    };
+  });
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;'
+  }[c]));
+}
+
+function formatDateForDisplay(dateString) {
+  if (!dateString) return '';
+  try {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('ru-RU');
+  } catch (e) {
+    return dateString;
+  }
+}
+
+function formatDateForAPI(dateString) {
+  if (!dateString) return '';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
+    return dateString;
+  }
+  try {
+    const date = new Date(dateString);
+    return date.toISOString().split('T')[0];
+  } catch (e) {
+    return dateString;
+  }
+}
+
+async function handleSave(id, tr) {
+  const edits = state.editing[id];
+  if (!edits || Object.keys(edits).length === 0) {
+    showMessage('Нет изменений', 'info');
+    return;
+  }
+  
+  const payload = {};
+  if ('name' in edits) payload.name = edits.name;
+  if ('description' in edits) payload.description = edits.description;
+  if ('owner_id' in edits) payload.owner_id = edits.owner_id;
+  if ('auction_end_date' in edits) payload.auction_end_date = formatDateForAPI(edits.auction_end_date);
+  
+  try {
+    await fetchJson(cfg.auctionUrl + '/lots/' + encodeURIComponent(id), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }, 'UpdateLot');
+    
+    delete state.editing[id];
+    await loadLots();
+    showMessage('Lot обновлён', 'success');
+  } catch(err) {
+    console.error(err);
+    showMessage('Ошибка при обновлении: ' + (err.body?.error || err.message || err.toString()), 'error');
+  }
+}
+
+async function handleDelete(id) {
+  if (!confirm('Удалить лот #' + id + '?')) return;
+  
+  try {
+    await fetchJson(cfg.auctionUrl + '/lots/' + encodeURIComponent(id), {
+      method: 'DELETE'
+    }, 'DeleteLot');
+    
+    await loadLots();
+    showMessage('Lot удалён', 'success');
+  } catch(err) {
+    console.error(err);
+    showMessage('Не удалось удалить: ' + (err.body?.error || err.message || err.toString()), 'error');
+  }
+}
+
+// Создание нового лота
+document.getElementById('newLotForm').onsubmit = async (e) => {
+  e.preventDefault();
+  
+  const name = document.getElementById('new_name').value.trim();
+  const start_price = parseFloat(document.getElementById('new_start_price').value);
+  const auction_end_date = document.getElementById('new_auction_end_date').value.trim();
+  const description = document.getElementById('new_description').value.trim();
+  const owner_id = document.getElementById('new_owner_id').value.trim(); // Добавлено обязательное поле
+  
+  if (!name || isNaN(start_price) || !owner_id) {
+    showMessage('Заполните имя, стартовую цену и ID владельца', 'error');
+    return;
+  }
+  
+  const payload = {
+    name,
+    start_price,
+    owner_id, // Добавлено обязательное поле
+    auction_end_date: formatDateForAPI(auction_end_date) || undefined,
+    description: description || undefined
+  };
+  
+  try {
+    await fetchJson(cfg.auctionUrl + '/lots', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }, 'CreateLot');
+    
+    showMessage('Лот создан', 'success');
+    e.target.reset();
+    document.getElementById('new_owner_id').value = cfg.orgId; // Восстанавливаем значение по умолчанию
+    await loadLots();
+  } catch(err) {
+    console.error(err);
+    showMessage('Ошибка при создании: ' + (err.body?.error || err.message || err.toString()), 'error');
+  }
+};
+
+/* ---------- Ставки ---------- */
+let currentBidLotId = null;
+
+async function openBidModal(id) {
+  currentBidLotId = id;
+  const lot = state.lots.find(l => String(l.id) === String(id));
+  const currentPrice = lot.current_price ?? lot.start_price ?? 0;
+  
+  document.getElementById('bidLotInfo').textContent = lot ? 
+    `${lot.id} — ${lot.name} (текущая: ${currentPrice})` : 
+    `Лот ${id}`;
+  
+  document.getElementById('bid_amount').value = '';
+  document.getElementById('bid_amount').min = (currentPrice + 0.01).toFixed(2);
+  document.getElementById('bid_amount').placeholder = `Минимум ${(currentPrice + 0.01).toFixed(2)}`;
+  document.getElementById('bidMessage').textContent = '';
+  document.getElementById('bidModal').style.display = 'flex';
+}
+
+document.getElementById('btnCloseBid').onclick = () => {
+  document.getElementById('bidModal').style.display = 'none';
+};
+
+document.getElementById('btnPlaceBid').onclick = async () => {
+  const amount = parseFloat(document.getElementById('bid_amount').value);
+  const lot = state.lots.find(l => String(l.id) === String(currentBidLotId));
+  const currentPrice = lot.current_price ?? lot.start_price ?? 0;
+  
+  if (isNaN(amount) || amount <= 0) {
+    document.getElementById('bidMessage').textContent = 'Введите корректную сумму';
+    return;
+  }
+  
+  if (amount <= currentPrice) {
+    document.getElementById('bidMessage').textContent = `Ставка должна быть больше текущей цены (${currentPrice})`;
+    return;
+  }
+  
+  try {
+    // Исправлено: изменено поле с bid_amount на amount
+    await fetchJson(cfg.auctionUrl + '/lots/' + encodeURIComponent(currentBidLotId) + '/bid', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ amount: amount }) // Исправлено поле
+    }, 'PlaceBid');
+    
+    document.getElementById('bidMessage').textContent = 'Ставка принята';
+    await loadLots();
+    setTimeout(() => {
+      document.getElementById('bidModal').style.display = 'none';
+    }, 800);
+  } catch(err) {
+    console.error(err);
+    const errorMsg = err.body?.error || err.message || err.status || err.toString();
+    
+    if (errorMsg.includes('greater than current price')) {
+      document.getElementById('bidMessage').textContent = 'Ставка должна быть больше текущей цены';
+    } else if (errorMsg.includes('Auction has ended')) {
+      document.getElementById('bidMessage').textContent = 'Аукцион уже завершен';
+    } else if (err.message.includes('Token required')) {
+      document.getElementById('bidMessage').textContent = 'Для ставок требуется оплатить метод PlaceBid';
+    } else {
+      document.getElementById('bidMessage').textContent = 'Ошибка: ' + errorMsg;
+    }
+  }
+};
+
+/* ---------- UI кнопки ---------- */
+document.getElementById('btnRequestBill').onclick = () => {
+  const now = new Date();
+  const later = new Date(now.getTime() + 1000 * 60 * 60 * 24);
+  const dateFrom = now.toISOString().split('T')[0];
+  const dateTo = later.toISOString().split('T')[0];
+  
+  // Покупаем доступ ко всем методам сервиса (должны совпадать с реестром)
+  requestBill(dateFrom, dateTo, ['ListLots', 'GetLot', 'CreateLot', 'UpdateLot', 'DeleteLot', 'PlaceBid']);
+};
+
+document.getElementById('btnPayBill').onclick = payBill;
+
+document.getElementById('btnShowTokens').onclick = () => {
+  const keys = Object.keys(state.tokens || {});
+  if (keys.length === 0) {
+    alert('Токенов нет. Сначала оплатите методы через "Сформировать счет" и "Оплатить счет".');
+    return;
+  }
+  
+  let txt = 'ОПЛАЧЕННЫЕ МЕТОДЫ:\n\n';
+  keys.forEach(k => {
+    const tokenInfo = state.tokens[k];
+    const expires = tokenInfo.expiresAt ? 
+      new Date(tokenInfo.expiresAt).toLocaleString('ru-RU') : 
+      '(без срока)';
+    const tokenPreview = tokenInfo.token ? 
+      tokenInfo.token.substring(0, 20) + '...' : 
+      'Нет токена';
+    
+    txt += `${k}\n`;
+    txt += `  Токен: ${tokenPreview}\n`;
+    txt += `  Истекает: ${expires}\n`;
+    txt += '─'.repeat(40) + '\n';
+  });
+  
+  txt += `\nВсего оплачено методов: ${keys.length}`;
+  
+  alert(txt);
+};
+
+// Кнопка для включения/выключения прокси
+const proxyToggleBtn = document.createElement('button');
+proxyToggleBtn.className = 'btn small';
+proxyToggleBtn.textContent = 'Proxy: ON';
+proxyToggleBtn.style.marginLeft = '8px';
+proxyToggleBtn.style.fontSize = '12px';
+proxyToggleBtn.style.background = '#4ade80';
+proxyToggleBtn.onclick = () => {
+  PROXY_CONFIG.enabled = !PROXY_CONFIG.enabled;
+  proxyToggleBtn.textContent = `Proxy: ${PROXY_CONFIG.enabled ? 'ON' : 'OFF'}`;
+  proxyToggleBtn.style.background = PROXY_CONFIG.enabled ? '#4ade80' : '#f87171';
+  showMessage(`Прокси ${PROXY_CONFIG.enabled ? 'включен' : 'выключен'}`, 'info', 2000);
+};
+
+document.querySelector('.controls').appendChild(proxyToggleBtn);
+
+// Инициализация
+updateTokenStatusUI();
+loadLots();
+</script>
+</body>
+</html>
