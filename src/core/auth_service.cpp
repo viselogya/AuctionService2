@@ -1,6 +1,7 @@
 #include "auction/core/auth_service.h"
 
 #include <cstdlib>
+#include <iostream>
 #include <stdexcept>
 
 namespace auction::core {
@@ -52,8 +53,16 @@ bool AuthService::verifyToken(const std::string& token, const std::string& metho
     return *cached;
   }
 
+  std::cerr << "Verifying token with Payment Service: " << verifyUrl_ << std::endl;
   const nlohmann::json payload = {{"token", token}, {"serviceName", serviceName_}, {"methodName", methodName}};
-  const auto response = httpClient_.postJson(verifyUrl_, payload);
+  
+  HttpResponse response;
+  try {
+    response = httpClient_.postJson(verifyUrl_, payload);
+  } catch (const std::exception& ex) {
+    std::cerr << "Payment Service request failed: " << ex.what() << std::endl;
+    throw;
+  }
 
   if (response.status == 401 || response.status == 403) {
     cache_.put(cacheKey, false);
