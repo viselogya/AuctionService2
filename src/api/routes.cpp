@@ -142,12 +142,12 @@ std::vector<core::ApiMethod> registerRoutes(httplib::Server& server, service::Lo
   });
 
   server.Get("/lots", [&lotService, &authService](const httplib::Request& req, httplib::Response& res) {
-    std::cout << "Received GET /lots request" << std::endl;
+    std::cerr << "Received GET /lots request" << std::endl;
     if (!requireAuth(req, res, authService, "ListLots")) {
-      std::cout << "Auth failed for /lots" << std::endl;
+      std::cerr << "Auth failed for GET /lots" << std::endl;
       return;
     }
-    std::cout << "Auth passed for /lots" << std::endl;
+    std::cerr << "Auth passed for GET /lots" << std::endl;
 
     try {
       const auto lots = lotService.listLots();
@@ -183,9 +183,12 @@ std::vector<core::ApiMethod> registerRoutes(httplib::Server& server, service::Lo
              });
 
   server.Post("/lots", [&lotService, &authService](const httplib::Request& req, httplib::Response& res) {
+    std::cerr << "Received POST /lots request" << std::endl;
     if (!requireAuth(req, res, authService, "CreateLot")) {
+      std::cerr << "Auth failed for POST /lots" << std::endl;
       return;
     }
+    std::cerr << "Auth passed for POST /lots" << std::endl;
 
     try {
       const auto body = nlohmann::json::parse(req.body);
