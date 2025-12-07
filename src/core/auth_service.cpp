@@ -1,5 +1,6 @@
 #include "auction/core/auth_service.h"
 
+#include <algorithm>
 #include <cstdlib>
 #include <iostream>
 #include <stdexcept>
@@ -30,7 +31,7 @@ std::string AuthService::resolveBaseUrl() {
   if (const char* value = std::getenv("PAYMENT_SERVICE_URL"); value != nullptr && *value != '\0') {
     return std::string{value};
   }
-  return "https://payment-service-15044579133.europe-central2.run.app";
+  return "http://localhost:8081";
 }
 
 std::string AuthService::resolveServiceName() {
@@ -54,6 +55,8 @@ bool AuthService::verifyToken(const std::string& token, const std::string& metho
   }
 
   std::cerr << "Verifying token with Payment Service: " << verifyUrl_ << std::endl;
+  std::cerr << "Token length: " << token.length() << ", first 10 chars: " << token.substr(0, std::min(size_t(10), token.length())) << "..." << std::endl;
+  std::cerr << "ServiceName: " << serviceName_ << ", MethodName: " << methodName << std::endl;
   const nlohmann::json payload = {{"token", token}, {"serviceName", serviceName_}, {"methodName", methodName}};
   
   HttpResponse response;
