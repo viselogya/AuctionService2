@@ -3,6 +3,7 @@
 #include <cstdlib>
 #include <stdexcept>
 #include <string_view>
+#include <iostream>
 
 namespace auction::core {
 
@@ -70,6 +71,9 @@ void ServiceRegistry::registerMethods(const std::vector<ApiMethod>& methods) con
     methodsJson.push_back(std::move(methodJson));
   }
   payload["methods"] = std::move(methodsJson);
+
+  std::cout << "Registering service at: " << registryUrl_ << std::endl;
+  std::cout << "Registry payload: " << payload.dump(2) << std::endl;
 
   const auto response = httpClient_.postJson(registryUrl_, payload);
   if (response.status < 200 || response.status >= 300) {
