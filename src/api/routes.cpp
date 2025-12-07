@@ -1,5 +1,6 @@
 #include "auction/api/routes.h"
 
+#include <iostream>
 #include <string>
 #include <vector>
 
@@ -20,11 +21,19 @@ void applyCorsHeaders(httplib::Response& res) {
 void respondJson(httplib::Response& res, int status, const nlohmann::json& body) {
   res.status = status;
   applyCorsHeaders(res);
+  
+  std::string content;
   if (status == 204) {
-    res.set_content("", "application/json");
+    content = "";
   } else {
-    res.set_content(body.dump(), "application/json");
+    content = body.dump();
   }
+  
+  std::cerr << "=== HTTP Response ===" << std::endl;
+  std::cerr << "Status: " << status << std::endl;
+  std::cerr << "Body: " << (content.length() > 200 ? content.substr(0, 200) + "..." : content) << std::endl;
+  
+  res.set_content(content, "application/json");
 }
 
 bool requireAuth(const httplib::Request& req, httplib::Response& res, core::AuthService& authService,
@@ -141,9 +150,12 @@ std::vector<core::ApiMethod> registerRoutes(httplib::Server& server, service::Lo
   });
 
   server.Get("/lots", [&lotService, &authService](const httplib::Request& req, httplib::Response& res) {
+    std::cerr << "=== Incoming Request: GET /lots ===" << std::endl;
     if (!requireAuth(req, res, authService, "ListLots")) {
+      std::cerr << "Auth FAILED for GET /lots" << std::endl;
       return;
     }
+    std::cerr << "Auth PASSED for GET /lots" << std::endl;
 
     try {
       const auto lots = lotService.listLots();
@@ -179,9 +191,13 @@ std::vector<core::ApiMethod> registerRoutes(httplib::Server& server, service::Lo
              });
 
   server.Post("/lots", [&lotService, &authService](const httplib::Request& req, httplib::Response& res) {
+    std::cerr << "=== Incoming Request: POST /lots ===" << std::endl;
+    std::cerr << "Request body: " << req.body << std::endl;
     if (!requireAuth(req, res, authService, "CreateLot")) {
+      std::cerr << "Auth FAILED for POST /lots" << std::endl;
       return;
     }
+    std::cerr << "Auth PASSED for POST /lots" << std::endl;
 
     try {
       const auto body = nlohmann::json::parse(req.body);

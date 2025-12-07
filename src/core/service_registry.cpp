@@ -3,7 +3,6 @@
 #include <cstdlib>
 #include <stdexcept>
 #include <string_view>
-#include <iostream>
 
 namespace auction::core {
 

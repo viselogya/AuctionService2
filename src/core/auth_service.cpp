@@ -1,5 +1,6 @@
 #include "auction/core/auth_service.h"
 
+#include <algorithm>
 #include <cstdlib>
 #include <iostream>
 #include <stdexcept>
@@ -27,10 +28,8 @@ std::string joinUrl(const std::string& base, const std::string& path) {
 }  // namespace
 
 std::string AuthService::resolveBaseUrl() {
-  if (const char* value = std::getenv("PAYMENT_SERVICE_URL"); value != nullptr && *value != '\0') {
-    return std::string{value};
-  }
-  return "http://localhost:8081";
+  // Хардкод, т.к. переменные окружения не всегда применяются в Railway
+  return "https://payment-service-15044579133.europe-central2.run.app";
 }
 
 std::string AuthService::resolveServiceName() {
@@ -53,7 +52,13 @@ bool AuthService::verifyToken(const std::string& token, const std::string& metho
     return *cached;
   }
 
+  std::cerr << "=== Token Verification ===" << std::endl;
+  std::cerr << "URL: " << verifyUrl_ << std::endl;
+  std::cerr << "Token length: " << token.length() << ", first 10 chars: " << token.substr(0, std::min(size_t(10), token.length())) << "..." << std::endl;
+  std::cerr << "ServiceName: " << serviceName_ << ", MethodName: " << methodName << std::endl;
+  
   const nlohmann::json payload = {{"token", token}, {"serviceName", serviceName_}, {"methodName", methodName}};
+  std::cerr << "Request payload: " << payload.dump() << std::endl;
   
   HttpResponse response;
   try {
@@ -62,6 +67,9 @@ bool AuthService::verifyToken(const std::string& token, const std::string& metho
     std::cerr << "Payment Service request failed: " << ex.what() << std::endl;
     throw;
   }
+  
+  std::cerr << "Payment Service response status: " << response.status << std::endl;
+  std::cerr << "Payment Service response body: " << response.body << std::endl;
 
   if (response.status == 401 || response.status == 403) {
     cache_.put(cacheKey, false);
