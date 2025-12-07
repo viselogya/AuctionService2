@@ -30,7 +30,7 @@ std::string AuthService::resolveBaseUrl() {
   if (const char* value = std::getenv("PAYMENT_SERVICE_URL"); value != nullptr && *value != '\0') {
     return std::string{value};
   }
-  return "http://localhost:8081";
+  return "https://payment-service-15044579133.europe-central2.run.app";
 }
 
 std::string AuthService::resolveServiceName() {
