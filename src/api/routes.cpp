@@ -11,8 +11,15 @@ namespace auction::api {
 
 namespace {
 
+void applyCorsHeaders(httplib::Response& res) {
+  res.set_header("Access-Control-Allow-Origin", "*");
+  res.set_header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  res.set_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+}
+
 void respondJson(httplib::Response& res, int status, const nlohmann::json& body) {
   res.status = status;
+  applyCorsHeaders(res);
   if (status == 204) {
     res.set_content("", "application/json");
   } else {
@@ -126,8 +133,11 @@ std::vector<core::ApiMethod> registerRoutes(httplib::Server& server, service::Lo
       {.methodName = "Health", .price = 0.0, .isPrivate = false, .arguments = {}},
   };
 
-  server.Get("/health", [](const httplib::Request&, httplib::Response& res) {
-    respondJson(res, 200, {{"status", "ok"}});
+  server.Get("/health", [](const httplib::Request&, httplib::Response& res) { respondJson(res, 200, {{"status", "ok"}}); });
+
+  server.Options(".*", [](const httplib::Request&, httplib::Response& res) {
+    res.status = 204;
+    applyCorsHeaders(res);
   });
 
   server.Get("/lots", [&lotService, &authService](const httplib::Request& req, httplib::Response& res) {

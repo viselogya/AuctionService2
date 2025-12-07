@@ -38,11 +38,18 @@ std::string ServiceRegistry::resolveRegistryUrl() {
   return "http://localhost:9000/service";
 }
 
-ServiceRegistry::ServiceRegistry() : registryUrl_(resolveRegistryUrl()) {}
+std::string ServiceRegistry::resolveServiceName() {
+  if (const char* value = std::getenv("SERVICE_NAME"); value != nullptr && *value != '\0') {
+    return std::string{value};
+  }
+  return "AuctionService";
+}
+
+ServiceRegistry::ServiceRegistry() : registryUrl_(resolveRegistryUrl()), serviceName_(resolveServiceName()) {}
 
 void ServiceRegistry::registerMethods(const std::vector<ApiMethod>& methods) const {
   nlohmann::json payload;
-  payload["serviceName"] = "auction";
+  payload["serviceName"] = serviceName_;
 
   nlohmann::json methodsJson = nlohmann::json::array();
   for (const auto& method : methods) {

@@ -29,9 +29,11 @@ class ServiceRegistry {
 
  private:
   std::string registryUrl_;
+  std::string serviceName_;
   HttpClient httpClient_;
 
   static std::string resolveRegistryUrl();
+  static std::string resolveServiceName();
 };
 
 }  // namespace auction::core
