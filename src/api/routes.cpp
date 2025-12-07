@@ -1,6 +1,5 @@
 #include "auction/api/routes.h"
 
-#include <iostream>
 #include <string>
 #include <vector>
 
@@ -142,12 +141,9 @@ std::vector<core::ApiMethod> registerRoutes(httplib::Server& server, service::Lo
   });
 
   server.Get("/lots", [&lotService, &authService](const httplib::Request& req, httplib::Response& res) {
-    std::cout << "Received GET /lots request" << std::endl;
     if (!requireAuth(req, res, authService, "ListLots")) {
-      std::cout << "Auth failed for /lots" << std::endl;
       return;
     }
-    std::cout << "Auth passed for /lots" << std::endl;
 
     try {
       const auto lots = lotService.listLots();

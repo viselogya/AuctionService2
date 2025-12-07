@@ -38,10 +38,14 @@ th { background:#f2f2f2; }
     <input id="cfgPaymentUrl" value="https://payment-service-15044579133.europe-central2.run.app" style="width:220px"/>
   </label>
   <label class="small">Organization ID:
-    <input id="cfgOrgId" value="org-123" style="width:140px"/>
+    <input id="cfgOrgId" value="org-123" style="width:100px"/>
+  </label>
+  <label class="small">Service Name:
+    <input id="cfgServiceName" value="AuctionServiceRelease" style="width:140px"/>
   </label>
   <button class="btn btn-primary" id="btnRequestBill">Сформировать счет</button>
   <button class="btn btn-primary" id="btnPayBill">Оплатить счет</button>
+  <button class="btn" id="btnLoadLots">Загрузить лоты</button>
   <div style="margin-left:auto; display:flex; align-items:center;">
     <button class="btn" id="btnShowTokens">Токены</button>
     <div id="tokenStatus" class="token-info"></div>
@@ -97,7 +101,7 @@ const cfg = {
   get auctionUrl(){ return document.getElementById('cfgAuctionUrl').value.replace(/\/+$/,''); },
   get paymentUrl(){ return document.getElementById('cfgPaymentUrl').value.replace(/\/+$/,''); },
   get orgId(){ return document.getElementById('cfgOrgId').value.trim(); },
-  serviceName: "AuctionServiceRelease" // Исправлено для совпадения с сервером
+  get serviceName(){ return document.getElementById('cfgServiceName').value.trim(); }
 };
 
 // Конфигурация прокси
@@ -611,6 +615,8 @@ document.getElementById('btnRequestBill').onclick = () => {
 
 document.getElementById('btnPayBill').onclick = payBill;
 
+document.getElementById('btnLoadLots').onclick = loadLots;
+
 document.getElementById('btnShowTokens').onclick = () => {
   const keys = Object.keys(state.tokens || {});
   if (keys.length === 0) {
@@ -657,7 +663,7 @@ document.querySelector('.controls').appendChild(proxyToggleBtn);
 
 // Инициализация
 updateTokenStatusUI();
-loadLots();
+showMessage('Для работы сначала сформируйте и оплатите счёт, затем нажмите "Загрузить лоты"', 'info', 10000);
 </script>
 </body>
 </html>

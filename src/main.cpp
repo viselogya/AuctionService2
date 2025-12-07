@@ -85,21 +85,9 @@ int main() {
     const int port = std::stoi(portString);
 
     std::cout << "Auction service is starting on " << host << ":" << port << std::endl;
-    std::cout << "DEBUG: host length=" << host.length() << ", port=" << port << std::endl;
     
-    // Try to bind first to get more info
-    if (!server.bind_to_port(host.c_str(), port)) {
-      std::cerr << "Failed to bind to " << host << ":" << port << std::endl;
-      std::cerr << "Trying to bind to 0.0.0.0:" << port << " instead..." << std::endl;
-      if (!server.bind_to_port("0.0.0.0", port)) {
-        std::cerr << "Failed to bind to 0.0.0.0:" << port << " as well" << std::endl;
-        return EXIT_FAILURE;
-      }
-    }
-    
-    std::cout << "Successfully bound, starting to listen..." << std::endl;
-    if (!server.listen_after_bind()) {
-      std::cerr << "Failed to start HTTP server after bind" << std::endl;
+    if (!server.listen(host.c_str(), port)) {
+      std::cerr << "Failed to start HTTP server on " << host << ":" << port << std::endl;
       return EXIT_FAILURE;
     }
   } catch (const std::exception& ex) {
