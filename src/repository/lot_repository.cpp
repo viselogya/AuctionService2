@@ -34,6 +34,11 @@ void LotRepository::ensureSchema() {
 }
 
 void LotRepository::prepareStatements() {
+  // Если база данных переподключалась, нужно пересоздать prepared statements
+  if (database_.checkAndClearReconnectFlag()) {
+    statementsPrepared_ = false;
+  }
+  
   if (statementsPrepared_) {
     return;
   }

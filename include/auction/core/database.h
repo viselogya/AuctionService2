@@ -25,14 +25,20 @@ class Database {
   ResultPtr query(const std::string& sql, const std::vector<std::optional<std::string>>& params = {});
   void prepare(const std::string& name, const std::string& sql);
   ResultPtr executePrepared(const std::string& name, const std::vector<std::optional<std::string>>& params = {});
+  
+  // Проверить, был ли reconnect (prepared statements нужно пересоздать)
+  bool checkAndClearReconnectFlag();
 
  private:
   PGconn* connection_{nullptr};
   std::mutex mutex_;
+  std::string connectionString_;
+  bool needReconnect_{false};
 
   static ResultPtr makeResult(PGresult* result);
   static std::string buildConnectionString();
   void ensureConnected();
+  void reconnect();
 };
 
 }  // namespace auction::core

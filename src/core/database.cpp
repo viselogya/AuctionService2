@@ -1,8 +1,10 @@
 #include "auction/core/database.h"
 
 #include <cstdlib>
+#include <iostream>
 #include <stdexcept>
 #include <string>
+#include <thread>
 #include <vector>
 
 namespace {
@@ -34,17 +36,20 @@ std::string Database::buildConnectionString() {
   const std::string password = requireEnv("SUPABASE_PASSWORD");
   const std::string port = requireEnv("SUPABASE_PORT");
 
+  // Добавляем keepalive параметры для обнаружения разрывов соединения
   std::string connection =
-      "host=" + host + " dbname=" + database + " user=" + user + " password=" + password + " port=" + port;
+      "host=" + host + " dbname=" + database + " user=" + user + " password=" + password + " port=" + port +
+      " keepalives=1 keepalives_idle=30 keepalives_interval=10 keepalives_count=3 connect_timeout=10";
   return connection;
 }
 
 Database::Database() {
-  const std::string connectionInfo = buildConnectionString();
-  connection_ = PQconnectdb(connectionInfo.c_str());
+  connectionString_ = buildConnectionString();
+  connection_ = PQconnectdb(connectionString_.c_str());
   if (!connection_ || PQstatus(connection_) != CONNECTION_OK) {
     throw std::runtime_error(std::string{"Failed to connect to database: "} + PQerrorMessage(connection_));
   }
+  std::cerr << "Database connected successfully" << std::endl;
 }
 
 Database::~Database() {
@@ -54,14 +59,65 @@ Database::~Database() {
   }
 }
 
+void Database::reconnect() {
+  std::cerr << "Attempting to reconnect to database..." << std::endl;
+  
+  if (connection_) {
+    PQfinish(connection_);
+    connection_ = nullptr;
+  }
+  
+  // Пробуем переподключиться до 3 раз
+  for (int attempt = 1; attempt <= 3; ++attempt) {
+    std::cerr << "Reconnect attempt " << attempt << "/3" << std::endl;
+    
+    connection_ = PQconnectdb(connectionString_.c_str());
+    if (connection_ && PQstatus(connection_) == CONNECTION_OK) {
+      std::cerr << "Database reconnected successfully" << std::endl;
+      needReconnect_ = true;  // Сигнал, что prepared statements нужно пересоздать
+      return;
+    }
+    
+    std::cerr << "Reconnect failed: " << (connection_ ? PQerrorMessage(connection_) : "null connection") << std::endl;
+    
+    if (attempt < 3) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(500 * attempt));
+    }
+  }
+  
+  throw std::runtime_error("Failed to reconnect to database after 3 attempts");
+}
+
+bool Database::checkAndClearReconnectFlag() {
+  if (needReconnect_) {
+    needReconnect_ = false;
+    return true;
+  }
+  return false;
+}
+
 void Database::ensureConnected() {
   if (!connection_) {
-    throw std::runtime_error("Database connection is not initialized");
+    reconnect();
+    return;
   }
 
+  // Проверяем статус соединения
   if (PQstatus(connection_) != CONNECTION_OK) {
-    throw std::runtime_error(std::string{"Database connection lost: "} + PQerrorMessage(connection_));
+    std::cerr << "Database connection lost, attempting reconnect..." << std::endl;
+    reconnect();
+    return;
   }
+  
+  // Дополнительно делаем ping для проверки живости соединения
+  PGresult* result = PQexec(connection_, "SELECT 1");
+  if (!result || PQresultStatus(result) != PGRES_TUPLES_OK) {
+    if (result) PQclear(result);
+    std::cerr << "Database ping failed, attempting reconnect..." << std::endl;
+    reconnect();
+    return;
+  }
+  PQclear(result);
 }
 
 Database::ResultPtr Database::query(const std::string& sql, const std::vector<std::optional<std::string>>& params) {
